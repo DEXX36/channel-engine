@@ -6,7 +6,7 @@
   "scripts": {
     "debug-server": "DEBUG=engine-*,vod-to-live node server.js",
     "test": "$(npm bin)/jasmine",
-    "postversion": "git push && git push --tags",
+    "postversion": "git push origin maint/2.x && git push --tags",
     "start": "node server.js",
     "start-demux": "node server-demux.js"
   },
