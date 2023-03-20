@@ -38,6 +38,7 @@ export interface ChannelEngineOpts {
   maxTickInterval?: number;
   cloudWatchMetrics?: boolean;
   useDemuxedAudio?: boolean;
+  defaultSubtitleUrl?: string;
   alwaysNewSegments?: boolean;
   diffCompensationRate?: number;
   staticDirectory?: string;
@@ -106,6 +107,7 @@ export interface Channel {
   id: string;
   profile: ChannelProfile[];
   audioTracks?: AudioTracks[];
+  subtitleTracks?: SubtitleTracks[];
   closedCaptions?: ClosedCaptions[];
 }
 
@@ -118,6 +120,11 @@ export interface ClosedCaptions {
 }
 
 export interface AudioTracks {
+  language: string;
+  name: string;
+  default?: boolean;
+}
+export interface SubtitleTracks {
   language: string;
   name: string;
   default?: boolean;
@@ -150,6 +157,7 @@ export interface IStreamSwitchManager {
 export class ChannelEngine {
   private options?: ChannelEngineOpts;
   private useDemuxedAudio: boolean;
+  private defaultSubtitleUrl: string;
   private alwaysNewSegments: boolean;
   private defaultSlateUri?: string;
   private slateDuration?: number;
@@ -179,6 +187,10 @@ export class ChannelEngine {
     this.useDemuxedAudio = false;
     if (options && options.useDemuxedAudio) {
       this.useDemuxedAudio = true;
+    }
+    this.defaultSubtitleUrl = "";
+    if (options && options.defaultSubtitleUrl) {
+      this.defaultSubtitleUrl = options.defaultSubtitleUrl;
     }
     this.alwaysNewSegments = false;
     if (options && options.alwaysNewSegments) {

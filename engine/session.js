@@ -40,6 +40,7 @@ class Session {
     this._events = [];
     this.averageSegmentDuration = AVERAGE_SEGMENT_DURATION;
     this.use_demuxed_audio = false;
+    this.defaultSubtitleUrl = "/dummyvtt"
     this.cloudWatchLogging = false;
     this.playheadDiffThreshold = DEFAULT_PLAYHEAD_DIFF_THRESHOLD;
     this.maxTickInterval = DEFAULT_MAX_TICK_INTERVAL;
@@ -49,11 +50,13 @@ class Session {
     this.timePositionOffset = 0;
     this.prevVodMediaSeq = {
       video: null,
-      audio: null
+      audio: null,
+      subtitle: null
     }
     this.prevMediaSeqOffset = {
       video: null,
-      audio: null
+      audio: null,
+      subtitle: null
     }
     this.waitingForNextVod = false;
     this.leaderIsSettingNextVod = false;
@@ -85,6 +88,9 @@ class Session {
       if (config.useDemuxedAudio) {
         this.use_demuxed_audio = true;
       }
+      if (config.defaultSubtitleUrl) {
+        this.defaultSubtitleUrl = true;
+      }
       if (config.startWithId) {
         this.startWithId = config.startWithId;
       }
@@ -93,6 +99,9 @@ class Session {
       }
       if (config.audioTracks) {
         this._audioTracks = config.audioTracks;
+      }
+      if (config.subtitleTracks) {
+        this._subtitleTracks = config.subtitleTracks;
       }
       if (config.closedCaptions) {
         this._closedCaptions = config.closedCaptions;
