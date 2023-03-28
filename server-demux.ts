@@ -30,6 +30,7 @@ class RefAssetManager implements IAssetManager {
           title: "Test HLS Bird noises (1m10s)",
           uri: "https://mtoczko.github.io/hls-test-streams/test-audio-pdt/playlist.m3u8",
         },
+
       ],
     };
     this.pos = {
@@ -54,6 +55,7 @@ class RefAssetManager implements IAssetManager {
         if (this.pos[channelId] > this.assets[channelId].length - 1) {
           this.pos[channelId] = 0;
         }
+        vod.offset = 30
         vod.timedMetadata = {
           'start-date': new Date().toISOString(),
           'class': 'se.eyevinn.demo'
@@ -106,6 +108,7 @@ const engineOptions: ChannelEngineOpts = {
   channelManager: refChannelManager,
   defaultSlateUri: "https://maitv-vod.lab.eyevinn.technology/slate-consuo.mp4/master.m3u8",
   slateRepetitions: 10,
+  slateDuration: 16000,
   redisUrl: process.env.REDIS_URL,
   useDemuxedAudio: true,
   alwaysNewSegments: true,

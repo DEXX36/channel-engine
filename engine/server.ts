@@ -38,7 +38,7 @@ export interface ChannelEngineOpts {
   maxTickInterval?: number;
   cloudWatchMetrics?: boolean;
   useDemuxedAudio?: boolean;
-  defaultSubtitleUrl?: string;
+  dummySubtitleUrl?: string;
   alwaysNewSegments?: boolean;
   diffCompensationRate?: number;
   staticDirectory?: string;
@@ -157,7 +157,7 @@ export interface IStreamSwitchManager {
 export class ChannelEngine {
   private options?: ChannelEngineOpts;
   private useDemuxedAudio: boolean;
-  private defaultSubtitleUrl: string;
+  private dummySubtitleUrl: string;
   private alwaysNewSegments: boolean;
   private defaultSlateUri?: string;
   private slateDuration?: number;
@@ -188,9 +188,9 @@ export class ChannelEngine {
     if (options && options.useDemuxedAudio) {
       this.useDemuxedAudio = true;
     }
-    this.defaultSubtitleUrl = "";
-    if (options && options.defaultSubtitleUrl) {
-      this.defaultSubtitleUrl = options.defaultSubtitleUrl;
+    this.dummySubtitleUrl = "";
+    if (options && options.dummySubtitleUrl) {
+      this.dummySubtitleUrl = options.dummySubtitleUrl;
     }
     this.alwaysNewSegments = false;
     if (options && options.alwaysNewSegments) {
@@ -270,6 +270,7 @@ export class ChannelEngine {
     }
     const handleMasterRoute = async (req, res, next) => {
       debug(req.params);
+      console.log(req.param)
       let m;
       if (req.params.file.match(/master.m3u8/)) {
         await this._handleMasterManifest(req, res, next);
@@ -282,6 +283,11 @@ export class ChannelEngine {
         req.params[1] = m[2];
         req.params[2] = m[3];
         await this._handleAudioManifest(req, res, next);
+      } else if (m = req.params.file.match(/master-(\S+)_(\S+).m3u8;session=(.*)$/)) {// not sure what to wright here
+        req.params[0] = m[1];
+        req.params[1] = m[2];
+        req.params[2] = m[3];
+        await this._handleSubtitleManifest(req, res, next);
       }
     };
     this.server.get('/live/:file', async (req, res, next) => {
@@ -314,6 +320,7 @@ export class ChannelEngine {
     this.server.get('/health', this._handleAggregatedSessionHealth.bind(this));
     this.server.get('/health/:sessionId', this._handleSessionHealth.bind(this));
     this.server.get('/reset', this._handleSessionReset.bind(this));
+    this.server.get('/'+this.dummySubtitleUrl, this._handleDummySubtitleUrk.bind(this));
 
     this.server.on('NotFound', (req, res, err, next) => {
       res.header("X-Instance-Id", this.instanceId + `<${version}>`);
@@ -409,6 +416,7 @@ export class ChannelEngine {
         sessionId: channel.id,
         averageSegmentDuration: channel.options && channel.options.averageSegmentDuration ? channel.options.averageSegmentDuration : this.streamerOpts.defaultAverageSegmentDuration,
         useDemuxedAudio: options.useDemuxedAudio,
+        dummySubtitleUrl: options.dummySubtitleUrl,
         alwaysNewSegments: options.alwaysNewSegments,
         noSessionDataTags: options.noSessionDataTags,
         playheadDiffThreshold: channel.options && channel.options.playheadDiffThreshold ? channel.options.playheadDiffThreshold : this.streamerOpts.defaultPlayheadDiffThreshold,
@@ -418,6 +426,7 @@ export class ChannelEngine {
         diffCompensationRate: channel.options && channel.options.diffCompensationRate ? channel.options.diffCompensationRate : this.streamerOpts.diffCompensationRate,
         profile: channel.profile,
         audioTracks: channel.audioTracks,
+        subtitleTracks: channel.subtitleTracks,
         closedCaptions: channel.closedCaptions,
         slateUri: channel.slate && channel.slate.uri ? channel.slate.uri : this.defaultSlateUri,
         slateRepetitions: channel.slate && channel.slate.repetitions ? channel.slate.repetitions : this.slateRepetitions,
@@ -428,6 +437,7 @@ export class ChannelEngine {
       sessionsLive[channel.id] = new SessionLive({
         sessionId: channel.id,
         useDemuxedAudio: options.useDemuxedAudio,
+        dummySubtitleUrl: options.dummySubtitleUrl,
         cloudWatchMetrics: this.logCloudWatchMetrics,
         profile: channel.profile,
       }, this.sessionLiveStore);
@@ -600,6 +610,34 @@ export class ChannelEngine {
     }
   }
 
+  async getSubtitleManifests(channelId) {
+    if (sessions[channelId]) {
+      const allSubtitleM3U8 = {};
+      let promises = [];
+      const session = sessions[channelId];
+      const addM3U8 = async (groupId, lang) => {
+        let subtitleM3U8 = await session.getCurrentSubtitleManifestAsync(groupId, lang);
+        if (!allSubtitleM3U8[groupId]) {
+          allSubtitleM3U8[groupId] = {};
+        }
+        allSubtitleM3U8[groupId][lang] = subtitleM3U8;
+      }
+      // Get m3u8s for all langauges for all groups
+      const subtitleGroupsAndLangs = await session.getSubtitleGroupsAndLangs();
+      for (const [subtitleGroup, languages] of Object.entries(subtitleGroupsAndLangs)) {
+        (<Array<string>>languages).forEach((lang) => {
+          promises.push(addM3U8(subtitleGroup, lang));
+        });
+      }
+      await Promise.all(promises);
+
+      return allSubtitleM3U8;
+    } else {
+      const err = new errs.NotFoundError('Invalid session');
+      return Promise.reject(err)
+    }
+  }
+
   _handleHeartbeat(req, res, next) {
     debug('req.url=' + req.url);
     res.send(200);
@@ -628,6 +666,7 @@ export class ChannelEngine {
       options.adXchangeUri = this.adXchangeUri;
       options.averageSegmentDuration = this.streamerOpts.defaultAverageSegmentDuration;
       options.useDemuxedAudio = this.useDemuxedAudio;
+      options.dummySubtitleUrl = this.dummySubtitleUrl;
       options.alwaysNewSegments = this.alwaysNewSegments;
       options.playheadDiffThreshold = this.streamerOpts.defaultPlayheadDiffThreshold;
       options.maxTickInterval = this.streamerOpts.defaultMaxTickInterval;
@@ -695,6 +734,56 @@ export class ChannelEngine {
           req.params[1],
           req.headers["x-playback-session-id"]
         );
+        res.sendRaw(200, Buffer.from(body, 'utf8'), {
+          "Content-Type": "application/x-mpegURL;charset=UTF-8",
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": `max-age=${this.streamerOpts.cacheTTL || '4'}`,
+          "X-Instance-Id": this.instanceId + `<${version}>`,
+        });
+        next();
+      } catch (err) {
+        next(this._gracefulErrorHandler(err));
+      }
+    } else {
+      const err = new errs.NotFoundError('Invalid session');
+      next(err);
+    }
+  }
+
+  async _handleSubtitleManifest(req, res, next) {
+    debug(`req.url=${req.url}`);
+    const session = sessions[req.params[2]];
+    if (session) {
+      try {
+        const body = await session.getCurrentSubtitleManifestAsync(
+          req.params[0],
+          req.params[1],
+          req.headers["x-playback-session-id"]
+        );
+        res.sendRaw(200, Buffer.from(body, 'utf8'), {
+          "Content-Type": "application/x-mpegURL;charset=UTF-8",
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": `max-age=${this.streamerOpts.cacheTTL || '4'}`,
+          "X-Instance-Id": this.instanceId + `<${version}>`,
+        });
+        next();
+      } catch (err) {
+        next(this._gracefulErrorHandler(err));
+      }
+    } else {
+      const err = new errs.NotFoundError('Invalid session');
+      next(err);
+    }
+  }
+
+  async _handleDummySubtitleUrk(req,res,next) {
+    debug(`req.url=${req.url}`);
+    console.log(req.param)
+    const session = sessions[req.params[2]];
+    if (session) {
+      try {
+        const body = `WEBVTT
+        X-TIMESTAMP-MAP=MPEGTS:0,LOCAL:00:00:00.000`;
         res.sendRaw(200, Buffer.from(body, 'utf8'), {
           "Content-Type": "application/x-mpegURL;charset=UTF-8",
           "Access-Control-Allow-Origin": "*",
