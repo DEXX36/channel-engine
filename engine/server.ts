@@ -22,6 +22,7 @@ const sessionsLive = {}; // Should be a persistent store...
 const sessionSwitchers = {}; // Should be a persistent store...
 const switcherStatus = {}; // Should be a persistent store...
 const eventStreams = {};
+const dummySubtitleUrlPath = "/dummyUrl/:file"
 
 export interface ChannelEngineOpts {
   defaultSlateUri?: string;
@@ -188,7 +189,7 @@ export class ChannelEngine {
     if (options && options.useDemuxedAudio) {
       this.useDemuxedAudio = true;
     }
-    this.dummySubtitleUrl = "";
+    this.dummySubtitleUrl = dummySubtitleUrlPath;
     if (options && options.dummySubtitleUrl) {
       this.dummySubtitleUrl = options.dummySubtitleUrl;
     }
@@ -270,7 +271,6 @@ export class ChannelEngine {
     }
     const handleMasterRoute = async (req, res, next) => {
       debug(req.params);
-      console.log(req.param)
       let m;
       if (req.params.file.match(/master.m3u8/)) {
         await this._handleMasterManifest(req, res, next);
@@ -283,7 +283,7 @@ export class ChannelEngine {
         req.params[1] = m[2];
         req.params[2] = m[3];
         await this._handleAudioManifest(req, res, next);
-      } else if (m = req.params.file.match(/master-(\S+)_(\S+).m3u8;session=(.*)$/)) {// not sure what to wright here
+      } else if (m = req.params.file.match(/subtitles-(\S+)_(\S+).m3u8;session=(.*)$/)) {
         req.params[0] = m[1];
         req.params[1] = m[2];
         req.params[2] = m[3];
@@ -320,7 +320,7 @@ export class ChannelEngine {
     this.server.get('/health', this._handleAggregatedSessionHealth.bind(this));
     this.server.get('/health/:sessionId', this._handleSessionHealth.bind(this));
     this.server.get('/reset', this._handleSessionReset.bind(this));
-    this.server.get('/'+this.dummySubtitleUrl, this._handleDummySubtitleUrk.bind(this));
+    this.server.get('/' + dummySubtitleUrlPath, this._handleDummySubtitleUrk.bind(this));
 
     this.server.on('NotFound', (req, res, err, next) => {
       res.header("X-Instance-Id", this.instanceId + `<${version}>`);
@@ -778,7 +778,7 @@ export class ChannelEngine {
 
   async _handleDummySubtitleUrk(req,res,next) {
     debug(`req.url=${req.url}`);
-    console.log(req.param)
+    console.log(req.params, 5000)
     const session = sessions[req.params[2]];
     if (session) {
       try {

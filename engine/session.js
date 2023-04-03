@@ -90,7 +90,6 @@ class Session {
       }
       if (config.defaultSubtitleUrl) {
         this.defaultSubtitleUrl = true;
-
       }
       if (config.startWithId) {
         this.startWithId = config.startWithId;
@@ -166,6 +165,7 @@ class Session {
     let playheadState = await this._playheadState.getValues(["state"]);
     let state = await this._playheadState.setState(PlayheadState.RUNNING);
     let numberOfLargeTicks = 0;
+    let audioIncrement = 1;
     while (state !== PlayheadState.CRASHED) {
       try {
         const tsIncrementBegin = Date.now();
@@ -697,7 +697,7 @@ class Session {
       throw new Error('Session not ready');
     }
     let currentVod = null;
-    const sessionState = await this._sessionState.getValues(["discSeqSubtile", "vodMediaSeqSubtitle"]);
+    const sessionState = await this._sessionState.getValues(["discSeqSubtitle", "vodMediaSeqSubtitle"]);
     let playheadState = await this._playheadState.getValues(["mediaSeqSubtitle", "vodMediaSeqSubtitle"]);
 
     if (playheadState.vodMediaSeqSubtitle > sessionState.vodMediaSeqSubtitle || (playheadState.vodMediaSeqSubtitle < sessionState.vodMediaSeqSubtitle && playheadState.mediaSeqSubtitle === this.prevMediaSeqOffset.subtitle)) {
@@ -736,10 +736,10 @@ class Session {
         let manifestDseq = sessionState.discSeqSubtitle + currentVod.discontinuitiesSubtitle[playheadState.vodMediaSeqSubtitle];
         if (currentVod.sequenceAlwaysContainNewSegments) {
           const mediaSequenceValue = currentVod.mediaSequenceValuesSubtitle[playheadState.vodMediaSeqSubtitle];
-          debug(`[${this._sessionId}]: {${mediaSequenceValue}}_{${currentVod.getLastSequenceMediaSequenceValueSubtitle()}} SUBTITLE`);
+          debug(`[${this._sessionId}]: {${mediaSequenceValue}}_{${currentVod.getLastSequenceMediaSequenceValueSubtitle()}} SUBTITLES`);
           manifestMseq = playheadState.mediaSeqSubtitle + mediaSequenceValue;
         }
-        debug(`[${this._sessionId}]: [${playheadState.vodMediaSeqSubtitle}]_[${currentVod.getLiveMediaSequencesCount("subtitle")}] SUBTITLE (${subtitleGroupId})`);
+        debug(`[${this._sessionId}]: [${playheadState.vodMediaSeqSubtitle}]_[${currentVod.getLiveMediaSequencesCount("subtitle")}] SUBTITLES (${subtitleGroupId})`);
         const m3u8 = currentVod.getLiveMediaSubtitleSequences(
           playheadState.mediaSeqSubtitle,
           subtitleGroupId,
@@ -807,7 +807,7 @@ class Session {
         this.isAllowedToClearVodCache = true;
       }
     } else {
-      sessionState.vodMediaSeqVideo = await this._sessionState.increment("vodMediaSeqVideo");
+      sessionState.vodMediaSeqVideo = await this._sessionState.increment("vodMediaSeqVideo", 1);
       let audioIncrement;
       if (this.use_demuxed_audio) {
         const position = (await this._getCurrentPlayheadPosition()) * 1000;
@@ -837,6 +837,11 @@ class Session {
         } while (!(-thresh < posDiff && posDiff < thresh));
         audioIncrement = index;
       }
+      debug(`[${this._sessionId}]: Will increment audio with ${audioIncrement}`);
+      if (audioIncrement === 0) {
+        audioIncrement++;
+      }
+      sessionState.vodMediaSeqAudio = await this._sessionState.increment("vodMediaSeqAudio", audioIncrement);
       let subtitleIncrement;
       if (this._subtitleTracks) {
         const position = (await this._getCurrentPlayheadPosition()) * 1000;
@@ -848,8 +853,9 @@ class Session {
         const subtitleSeqLastIdx = currentVod.getLiveMediaSequencesCount("subtitle") - 1;
         const thresh = 0.5;
         do {
-          const subtitlePosition = (await this._getSubtitlePlayheadPosition(sessionState.vodMediaSeqSubtitle + index)) * 1000;
+          const subtitlePosition = (await this._getSubtitlePlayheadPosition(sessionState.vodMediaSeqSubtitle +  1 + index)) * 1000;
           posDiff = position - subtitlePosition;
+          console.log("position", position, "subtitlePosition", subtitlePosition, "posDiff", posDiff,"index", index, "subtitleSeqLastIdx", subtitleSeqLastIdx, "sessionState.vodMediaSeqSubtitle",sessionState.vodMediaSeqSubtitle)
           if (posDiff < 0) {
             break;
           }
@@ -864,8 +870,10 @@ class Session {
             break;
           }
         } while (!(-thresh < posDiff && posDiff < thresh));
+        console.log("posDiff", posDiff, "index", index, "subtitlePosition", subtitlePosition, "subtitleSeqLastIdx", subtitleSeqLastIdx, "sessionState.vodMediaSeqSubtitle",sessionState.vodMediaSeqSubtitle, 200)
         subtitleIncrement = index;
       }
+      console.log(`[${this._sessionId}]: Will increment subtitle with ${subtitleIncrement}`);
       sessionState.vodMediaSeqSubtitle = await this._sessionState.increment("vodMediaSeqSubtitle", subtitleIncrement);
     }
 
@@ -879,7 +887,7 @@ class Session {
     }
 
     if (sessionState.vodMediaSeqSubtitle >= currentVod.getLiveMediaSequencesCount("subtitle") - 1) {
-      sessionState.vodMediaSeqSubtitle = await this._sessionState.set("vodMediaSeqSubtitle", currentVod.getLiveMediaSequencesCount("subtile") - 1);
+      sessionState.vodMediaSeqSubtitle = await this._sessionState.set("vodMediaSeqSubtitle", currentVod.getLiveMediaSequencesCount("subtitle") - 1);
     }
 
     if (this.isSwitchingBackToV2L) {
@@ -1075,7 +1083,7 @@ class Session {
       }
     }
 
-    debug(`[${this._sessionId}]: SUBTITLE ${timeSinceLastRequest} (${this.averageSegmentDuration}) subtitleGroupId=${subtitleGroupId} subtitleLanguage=${subtitleLanguage} vodMediaSeq=(${sessionState.vodMediaSeqVideo}_${sessionState.vodMediaSeqSubtitle})`);
+    debug(`[${this._sessionId}]: SUBTITLES ${timeSinceLastRequest} (${this.averageSegmentDuration}) subtitleGroupId=${subtitleGroupId} subtitleLanguage=${subtitleLanguage} vodMediaSeq=(${sessionState.vodMediaSeqVideo}_${sessionState.vodMediaSeqSubtitle})`);
     let m3u8;
     try {
       m3u8 = currentVod.getLiveMediaSubtitleSequences(sessionState.mediaSeqSubtitle, subtitleGroupId, subtitleLanguage, sessionState.vodMediaSeqSubtitle, sessionState.discSeqSubtitle);
@@ -1142,26 +1150,27 @@ class Session {
     }
     if (this._subtitleTracks) {
       if (subtitleGroupIds.length > 0) {
-        m3u8 += "# SUBTITLE groups\n";
+        m3u8 += "# S groups\n";
         for (let i = 0; i < subtitleGroupIds.length; i++) {
           let subtitleGroupId = subtitleGroupIds[i];
           for (let j = 0; j < this._subtitleTracks.length; j++) {
             let subtitleTrack = this._subtitleTracks[j];
             // Make default track if set property is true.
-            m3u8 += `#EXT-X-MEDIA:TYPE=SUBTITLE` +
+            m3u8 += `#EXT-X-MEDIA:TYPE=SUBTITLES` +
               `,GROUP-ID="${subtitleGroupId}"` +
               `,LANGUAGE="${subtitleTrack.language}"` +
               `,NAME="${subtitleTrack.name}"` +
               `,AUTOSELECT=YES,DEFAULT=${subtitleTrack.default ? 'YES' : 'NO'}` +
-              `,URI="master-${subtitleGroupId}_${subtitleTrack.language}.m3u8;session=${this._sessionId}"` +
+              `,URI="subtitles-${subtitleGroupId}_${subtitleTrack.language}.m3u8;session=${this._sessionId}"` +
               "\n";
           }
         }
-        // As of now, by default set StreamItem's SUBTITLE attribute to <first subtitle group-id>
+        // As of now, by default set StreamItem's SUBTITLES attribute to <first subtitle group-id>
         defaultSubtitleGroupId = subtitleGroupIds[0];
       }
     }
     if (this._sessionProfile) {
+      console.log(defaultSubtitleGroupId, "halksdjhf")
       const sessionProfile = filter ? applyFilter(this._sessionProfile, filter) : this._sessionProfile;
       sessionProfile.forEach(profile => {
         if (this.use_demuxed_audio) {
@@ -1171,14 +1180,17 @@ class Session {
           if (audioCodec) {
             const profileChannels = profile.channels ? profile.channels : "2";
             audioGroupIdToUse = currentVod.getAudioGroupIdForCodecs(audioCodec, profileChannels);
+            if (!audioGroupIds.includes(audioGroupIdToUse)) {
+              audioGroupIdToUse = defaultAudioGroupId; 
+            }
           }
-
           // skip stream if no corresponding audio group can be found
           if (audioGroupIdToUse) {
             m3u8 += '#EXT-X-STREAM-INF:BANDWIDTH=' + profile.bw + 
               ',RESOLUTION=' + profile.resolution[0] + 'x' + profile.resolution[1] + 
               ',CODECS="' + profile.codecs + '"' + 
               `,AUDIO="${audioGroupIdToUse}"` + 
+              (defaultSubtitleGroupId ? `,SUBTITLES="${defaultSubtitleGroupId}"` : '') + 
               (hasClosedCaptions ? ',CLOSED-CAPTIONS="cc"' : '') + '\n';
             m3u8 += "master" + profile.bw + ".m3u8;session=" + this._sessionId + "\n";
           }
@@ -1187,7 +1199,7 @@ class Session {
             ',RESOLUTION=' + profile.resolution[0] + 'x' + profile.resolution[1] + 
             ',CODECS="' + profile.codecs + '"' + 
             (defaultAudioGroupId ? `,AUDIO="${defaultAudioGroupId}"` : '') + 
-            (defaultSubtitleGroupId ? `,SUBTITLE="${defaultSubtitleGroupId}"` : '') + 
+            (defaultSubtitleGroupId ? `,SUBTITLES="${defaultSubtitleGroupId}"` : '') + 
             (hasClosedCaptions ? ',CLOSED-CAPTIONS="cc"' : '') + '\n';
           m3u8 += "master" + profile.bw + ".m3u8;session=" + this._sessionId + "\n";
         }
@@ -1198,7 +1210,7 @@ class Session {
           ',RESOLUTION=' + profile.resolution + 
           ',CODECS="' + profile.codecs + '"' + 
           (defaultAudioGroupId ? `,AUDIO="${defaultAudioGroupId}"` : '') + 
-          (defaultSubtitleGroupId ? `,SUBTITLE="${defaultSubtitleGroupId}"` : '') +
+          (defaultSubtitleGroupId ? `,SUBTITLES="${defaultSubtitleGroupId}"` : '') +
           (hasClosedCaptions ? ',CLOSED-CAPTIONS="cc"' : '') + '\n';
         m3u8 += "master" + profile.bw + ".m3u8;session=" + this._sessionId + "\n";
       });
@@ -1918,6 +1930,7 @@ class Session {
     const sessionState = await this._sessionState.getValues(["vodMediaSeqVideo"]);
     const currentVod = await this._sessionState.getCurrentVod();
     const playheadPositions = currentVod.getPlayheadPositions();
+    console.log("playheadPositions", playheadPositions, "sessionState.vodMediaSeqVideo", sessionState.vodMediaSeqVideo)
     debug(`[${this._sessionId}]: Current playhead position (${sessionState.vodMediaSeqVideo}): ${playheadPositions[sessionState.vodMediaSeqVideo]}`);
     return playheadPositions[sessionState.vodMediaSeqVideo];
   }

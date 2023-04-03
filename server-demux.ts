@@ -12,6 +12,7 @@ import {
   Channel,
   ChannelProfile,
   AudioTracks,
+  SubtitleTracks,
 } from "./index";
 
 class RefAssetManager implements IAssetManager {
@@ -23,14 +24,13 @@ class RefAssetManager implements IAssetManager {
         {
           id: 1,
           title: "Sintel",
-          uri: "https://cdn.bitmovin.com/content/assets/sintel/hls/playlist.m3u8",
+          uri: "https://playertest.longtailvideo.com/adaptive/elephants_dream_v4/index.m3u8",
         },
         {
           id: 2,
           title: "Test HLS Bird noises (1m10s)",
           uri: "https://mtoczko.github.io/hls-test-streams/test-audio-pdt/playlist.m3u8",
         },
-
       ],
     };
     this.pos = {
@@ -55,7 +55,6 @@ class RefAssetManager implements IAssetManager {
         if (this.pos[channelId] > this.assets[channelId].length - 1) {
           this.pos[channelId] = 0;
         }
-        vod.offset = 30
         vod.timedMetadata = {
           'start-date': new Date().toISOString(),
           'class': 'se.eyevinn.demo'
@@ -70,7 +69,7 @@ class RefAssetManager implements IAssetManager {
 
 class RefChannelManager implements IChannelManager {
   getChannels(): Channel[] {
-    return [{ id: "1", profile: this._getProfile(), audioTracks: this._getAudioTracks() }];
+    return [{ id: "1", profile: this._getProfile(), audioTracks: this._getAudioTracks(), subtitleTracks: this._getSubtitleTracks() }];
   }
 
   _getProfile(): ChannelProfile[] {
@@ -97,6 +96,12 @@ class RefChannelManager implements IChannelManager {
       { language: "sp", name: "Spanish", default: false }
     ];
   }
+  _getSubtitleTracks(): SubtitleTracks[] {
+    return [
+      { language: "zh", name: "chinese", default: true },
+      { language: "fr", name: "french", default: false }
+    ];
+  }
 }
 
 const refAssetManager = new RefAssetManager();
@@ -108,7 +113,6 @@ const engineOptions: ChannelEngineOpts = {
   channelManager: refChannelManager,
   defaultSlateUri: "https://maitv-vod.lab.eyevinn.technology/slate-consuo.mp4/master.m3u8",
   slateRepetitions: 10,
-  slateDuration: 16000,
   redisUrl: process.env.REDIS_URL,
   useDemuxedAudio: true,
   alwaysNewSegments: true,

@@ -116,8 +116,8 @@ class SharedSessionState {
   async increment(key, inc) {
     let value = await this.get(key);
     if (await this.store.isLeader(this.instanceId)) {
-      let valueToIncrement = inc || 1;
-      debug(`[${this.sessionId}]: I am incrementing key ${key} with ${valueToIncrement}`);
+      let valueToIncrement = inc;
+      console.log(`[${this.sessionId}]: I am incrementing key ${key} with ${valueToIncrement}`);
       value += valueToIncrement;
       return await this.store.set(this.sessionId, key, value);
     } else {
